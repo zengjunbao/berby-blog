@@ -1,1 +1,0 @@
-[{"title":"rust笔记.md","date":"2022.03.17 14:16","description":"## 安装\n\n注意！！！\n\tRust 风格的缩进使用 4 个空格，而不是制表符;\n\t函数后加!代表调用 Rust 宏 ，如println! 而不是普通的函数;\n\tRust 代码的大多数行都以一个 ; 结尾；\n\n\n\n## 使用\n\nrustc\n\t根据rustc编译 main.rs 生成可执行文件 \n\nCargo 是 Rust 的构建系统和包管理器。\n\t\tcargo new name 新建项目\n\t\t如果","tags":null,"author":"","category":"rust","path":"/rust/rust笔记.md"}]
