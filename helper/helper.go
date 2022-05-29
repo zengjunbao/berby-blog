@@ -3,7 +3,6 @@ package helper
 import (
 	"fmt"
 	"github.com/cjyzwg/forestblog/config"
-	"github.com/cjyzwg/forestblog/models"
 	"html/template"
 	"log"
 	"net/http"
@@ -77,15 +76,6 @@ func UpdateArticle() {
 	if err != nil {
 		log.Fatalf("cmd.Run() failed with %s\n", err)
 	}
-
 	log.Println("UpdateArticle:" + string(out))
-	//生成缓存
-	_, err = models.GetMarkdownListByCache("/")
-
-	//生成缓存
-	// _, err := models.GetMarkdownListByCache("/")
-	if err != nil {
-		log.Fatalf("生成缓存失败： %s\n", err)
-	}
 	return
 }

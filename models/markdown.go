@@ -2,7 +2,6 @@ package models
 
 import (
 	"bytes"
-	"crypto/md5"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -150,47 +149,12 @@ func getMarkdownList(dir string) (MarkdownList, error) {
 }
 
 func GetMarkdownListByCache(dir string) (MarkdownList, error) {
-
-	cacheFileName := fmt.Sprintf("%x", md5.Sum([]byte(dir)))
-
-	cacheFilePath := config.CurrentDir + "/cache/" + cacheFileName + ".json"
-
-	var content MarkdownList
-
-	cacheFile, cacheErr := ioutil.ReadFile(cacheFilePath)
-
-	if cacheErr == nil && json.Unmarshal(cacheFile, &content) == nil {
-		return content, nil
-	}
-
 	content, err := getMarkdownList(dir)
-
 	if err != nil {
 		return content, err
 	}
 
 	sort.Sort(content)
-	markdownListJson, err := json.Marshal(content)
-
-	if err != nil {
-		return content, err
-	}
-
-	cacheDir := config.CurrentDir + "/cache"
-	cacheInfo, err := os.Stat(cacheDir)
-
-	if err != nil || !cacheInfo.IsDir() {
-		if os.Mkdir(cacheDir, os.ModePerm) != nil {
-			return content, err
-		}
-	}
-
-	err = ioutil.WriteFile(cacheFilePath, markdownListJson, os.ModePerm)
-
-	if err != nil {
-		return content, err
-	}
-
 	return content, nil
 }
 
