@@ -1,0 +1,16 @@
+{
+  "port": 8081,
+  "pageSize": 7,
+  "descriptionLen": 200,
+  "author": "Berby",
+  "webHookSecret": "berby blog",
+  "timeLayout": "2006-01-02 15:04",
+  "siteName": "Berby Blog",
+  "documentPath": "resources/blog_docs",
+  "htmlKeywords": "forest blog,Golang",
+  "htmlDescription": "Berby blog",
+  "categoryListFileNumber": 6,
+  "themeColor": "#9c27b0",
+  "dashboardEntrance": "/admin",
+  "themeOption": ["#673ab7","#f44336","#9c27b0","#2196f3","#607d8b","#795548"]
+}
