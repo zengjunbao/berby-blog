@@ -425,3 +425,273 @@ func (h *hmap) growing() bool {
 ```
 
 在分配assign逻辑中，当没有位置给key使用，而且满足测试条件(装载因子>6.5或有太多溢出通)时，会触发（hashGrow）扩容。
+
+
+
+
+
+
+
+## channel
+
+golang 的 channel 就是一个环形队列（ringbuffer）的实现。
+
+
+
+### 源码
+
+
+
+```go
+type hchan struct {
+ qcount   uint           // queue 里面有效用户元素，这个字段是在元素出对，入队改变的；
+ dataqsiz uint           // 初始化的时候赋值，之后不再改变，指明数组 buffer 的大小；
+ buf      unsafe.Pointer // 指明 buffer 数组的地址，初始化赋值，之后不会再改变；
+ elemsize uint16  // 指明元素的大小，和 dataqsiz 配合使用就能知道 buffer 内存块的大小了；
+ closed   uint32
+ elemtype *_type // 元素类型，初始化赋值；
+ sendx    uint   // send index
+ recvx    uint   // receive index
+ recvq    waitq  // 等待 recv 响应的对象列表，抽象成 waiters
+ sendq    waitq  // 等待 sedn 响应的对象列表，抽象成 waiters
+
+ // 互斥资源的保护锁，官方特意说明，在持有本互斥锁的时候，绝对不要修改 Goroutine 的状态，不能很有可能在栈扩缩容的时候，出现死锁
+ lock mutex
+}
+```
+
+
+
+```go
+// waitq 类型其实就是一个双向列表的实现，和 linux 里面的 LIST 实现非常相像
+type waitq struct {
+ first *sudog
+ last  *sudog
+}
+```
+
+
+
+### send
+
+当我们在 golang 里面执行 `c <- x` 这么一行代码意图投递一个元素到 channel 的时候，其实就是调用到 chansend 函数。这个函数分几个场景来处理，总结来说：
+
+1. 场景一：如果有人（ goroutine ）等着取 channel 的元素，这种场景最快乐，直接把元素给他就完了，然后把它唤醒，hchan 本身递增下 ringbuffer 索引；
+2. 场景二：如果 ringbuffer 还有空间，那么就把元素存着，这种也是场景的流程，存和取走的是异步流程，可以把 channel 理解成消息队列，生产者和消费者解耦；
+3. 场景三：ringbuffer 没空间，这个时候就要是否需要 block 了，一般来讲，`c <- x` 编译出的代码都是 `block = true` ，那么什么时候 chansend 的 block 参数会是 false 呢？答案是：select 的时候；
+
+
+
+```go
+// return true 则入队成功
+
+func chansend(c *hchan, ep unsafe.Pointer, block bool, callerpc uintptr) bool {
+    // channel 的所有操作，都在互斥锁下；
+    lock(&c.lock)
+    // 如果投递的目标是已经关闭的 channel，那么直接 panic；
+    if c.closed != 0 {
+        unlock(&c.lock)
+        panic(plainError("send on closed channel"))
+    }
+    // 场景一：性能最好的场景，我投递的元素刚好有人在等着（那我直接给他就完了）;
+    // 调用的是 send 函数，这个函数后面详细阐述，其实非常简单，递增 sendx, recvx 的索引，然后直接把元素给到等他的人，并且唤醒他；
+    if sg := c.recvq.dequeue(); sg != nil {
+        send(c, sg, ep, func() { unlock(&c.lock) }, 3)
+        return true
+    }
+    // 场景二：ringbuffer 还有空间，那么把元素放好，递增索引，就可以返回了；
+    if c.qcount < c.dataqsiz {
+        // 复制，赋值好元素；
+        qp := chanbuf(c, c.sendx)
+        typedmemmove(c.elemtype, qp, ep)
+        // 递增索引
+        c.sendx++
+        // 回环空间
+        if c.sendx == c.dataqsiz {
+            c.sendx = 0
+        }
+        // 递增元素个数
+        c.qcount++
+        unlock(&c.lock)
+        return true
+    }
+    // 判断是否需要阻塞？如果是非阻塞的，那么就直接解锁返回了，如果是阻塞的场景，那么就会走到下面的逻辑哦；
+    // chan <- 和 <-chan 的场景，都是 true，但是会有其他场景这里是 false，可以提前想下？
+    if !block {
+        unlock(&c.lock)
+        return false
+    }
+    // 代码走到这里，说明都是因为条件不满足，要阻塞当前 goroutine，所以做的事情本质上就是保留好通知路径，等待条件满足，会在这个地方唤醒；
+    gp := getg()
+    mysg := acquireSudog()
+    mysg.releasetime = 0
+    mysg.elem = ep
+    mysg.waitlink = nil
+    mysg.g = gp
+    mysg.isSelect = false
+    mysg.c = c
+    gp.waiting = mysg
+    gp.param = nil
+    // 把 goroutine 相关的线索结构入队，等待条件满足的唤醒；
+    c.sendq.enqueue(mysg)
+    // goroutine 切走，让出 cpu 执行权限；
+    gopark(chanparkcommit, unsafe.Pointer(&c.lock), waitReasonChanSend, traceEvGoBlockSend, 2)
+
+    // 到这就是某些人唤醒该 goroutine 了。
+    // 下面就是唤醒之后的逻辑了；
+    if mysg != gp.waiting {
+        throw("G waiting list is corrupted")
+    }
+    // 做一些资源的释放和环境的清理。
+    gp.waiting = nil
+    gp.activeStackChans = false
+    if gp.param == nil {
+        // 做一些校验
+        if c.closed == 0 {
+            throw("chansend: spurious wakeup")
+        }
+        panic(plainError("send on closed channel"))
+    }
+    gp.param = nil
+    mysg.c = nil
+    releaseSudog(mysg)
+    return true
+}
+```
+
+
+
+
+
+### recv
+
+chanrecv 函数的返回值有两个值，selected，received，其中 selected 一般作为 select 结合的函数返回值，指明是否要进入 select-case 的代码分支，received 表明是否从队列中成功获取到元素，有几种情况：
+
+1. 如果是非阻塞模式（ block=false ），并且没有任何可用元素，返回 （selected=false，received=false），这样就不会进到 select 的 case 分支；
+
+2. 如果是阻塞模式（ block=true ），如果 chan 已经 closed 了，那么返回的是 （selected=true，received=false），说明需要进到 select 的分支，但是是没有取到元素的；
+
+3. 如果是阻塞模式，chan 还是正常状态，那么返回（selected=true，recived=true），说明正常取到了元素；
+
+   
+
+```go
+func chanrecv(c *hchan, ep unsafe.Pointer, block bool) (selected, received bool) {
+ // 特殊场景：非阻塞模式，并且没有元素的场景直接就可以返回了，这个分支是快速分支，下面的代码都是在锁内的；
+ if !block && (c.dataqsiz == 0 && c.sendq.first == nil ||
+  c.dataqsiz > 0 && atomic.Loaduint(&c.qcount) == 0) &&
+  atomic.Load(&c.closed) == 0 {
+  return
+ }
+
+ // 以下所有的逻辑都在锁内；
+ lock(&c.lock)
+
+ if c.closed != 0 && c.qcount == 0 {
+  if raceenabled {
+   raceacquire(c.raceaddr())
+  }
+  unlock(&c.lock)
+  if ep != nil {
+   typedmemclr(c.elemtype, ep)
+  }
+  return true, false
+ }
+
+ // 场景：如果发现有个人（sender）正在等着别人接收，那么刚刚好，直接把它的元素给到我们这里就好了；
+ if sg := c.sendq.dequeue(); sg != nil {
+  recv(c, sg, ep, func() { unlock(&c.lock) }, 3)
+  return true, true
+ }
+
+ // 场景：ringbuffer 还有空间存元素，那么下面就可以把元素放到 ringbuffer 放好，递增索引，就可以返回了；
+ if c.qcount > 0 {
+  // 存元素
+  qp := chanbuf(c, c.recvx)
+  if ep != nil {
+   typedmemmove(c.elemtype, ep, qp)
+  }
+  typedmemclr(c.elemtype, qp)
+  // 递增索引
+  c.recvx++
+  if c.recvx == c.dataqsiz {
+   c.recvx = 0
+  }
+  c.qcount--
+  unlock(&c.lock)
+  return true, true
+ }
+
+ // 代码到这说明 ringbuffer 空间是不够的，后面学会要做两个事情，是否需要阻塞？
+ // 如果 block 为 false ，那么直接就退出了，返回对应的返回值；
+ if !block {
+  unlock(&c.lock)
+  return false, false
+ }
+
+ // 到这就说明要阻塞等待了，下面唯一要做的就是给阻塞做准备（准备好唤醒的条件）
+ gp := getg()
+ mysg := acquireSudog()
+ mysg.releasetime = 0
+ mysg.elem = ep
+ mysg.waitlink = nil
+ gp.waiting = mysg
+ mysg.g = gp
+ mysg.isSelect = false
+ mysg.c = c
+ gp.param = nil
+ // goroutine 作为一个 waiter 入队列，等待条件满足之后，从这个队列里取出来唤醒；
+ c.recvq.enqueue(mysg)
+ // goroutine 切走，交出 cpu 执行权限
+ goparkunlock(&c.lock, waitReasonChanReceive, traceEvGoBlockRecv, 3)
+
+ // 这里是被唤醒的开始的地方；
+ if mysg != gp.waiting {
+  throw("G waiting list is corrupted")
+ }
+ // 下面做一些资源的清理
+ gp.waiting = nil
+ closed := gp.param == nil
+ gp.param = nil
+ mysg.c = nil
+ releaseSudog(mysg)
+ return true, !closed
+}
+```
+
+
+
+### 遍历
+
+使用`for-range`会编译成`chanrecv2( c, ep )`方法，所以只有这个 chan 被 close 了，否则一直会处于这个死循环内部。
+
+```text
+for (   ; ok = chanrecv2( c, ep )  ;   ) {
+    // do something
+}
+
+func chanrecv2(c *hchan, elem unsafe.Pointer) (received bool) {
+    // 注意了，这个 block=true，说明 chanrecv 内部是阻塞的；
+    _, received = chanrecv(c, elem, true)        
+    return
+}
+```
+
+
+
+参考链接：https://zhuanlan.zhihu.com/p/297053654
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
