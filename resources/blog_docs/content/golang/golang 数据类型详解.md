@@ -436,7 +436,11 @@ func (h *hmap) growing() bool {
 
 golang 的 channel 就是一个环形队列（ringbuffer）的实现。
 
-
+> 发生panic的情景：
+>
+> 1. 关闭已关闭的channel
+> 2. 关闭 nil channel
+> 3. 向已关闭的channel发送数据
 
 ### 源码
 
