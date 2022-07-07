@@ -446,7 +446,7 @@ golang 的 channel 就是一个环形队列（ringbuffer）的实现。
 
 
 
-![chan_flow_chart](C:\Users\Administrator\Pictures\sdk\chan_flow_chart.png)
+![chan_flow_chart](https://raw.githubusercontent.com/ywanbing/golearning/master/chan_flow_chart/chan_flow_chart.png)
 
 
 
