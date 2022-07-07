@@ -442,9 +442,15 @@ golang 的 channel 就是一个环形队列（ringbuffer）的实现。
 > 2. 关闭 nil channel
 > 3. 向已关闭的channel发送数据
 
+
+
+
+
+![chan_flow_chart](C:\Users\Administrator\Pictures\sdk\chan_flow_chart.png)
+
+
+
 ### 源码
-
-
 
 ```go
 type hchan struct {
