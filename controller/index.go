@@ -125,7 +125,7 @@ func HandleActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if r.Method == "POST" {
 		filePath := "activity.txt"
-		file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0666)
+		file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
 			fmt.Println("文件打开失败", err)
 		}
