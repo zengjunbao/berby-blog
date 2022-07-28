@@ -11,15 +11,17 @@ import (
 	"strings"
 
 	"github.com/cjyzwg/forestblog/config"
+	"github.com/gomarkdown/markdown"
+	"github.com/gomarkdown/markdown/parser"
 )
 
 func readMarkdown(path string) (Markdown, MarkdownDetails, error) {
-	//path=>/categoryName/xxx.md
+	// path=>/categoryName/xxx.md
 	fullPath := config.Cfg.DocumentPath + "/content" + path
 
 	categoryName := strings.Replace(path, "/", "", 1)
 
-	if strings.Index(categoryName, "/") == -1 { //文件在根目录下(content/)没有分类名称
+	if strings.Index(categoryName, "/") == -1 { // 文件在根目录下(content/)没有分类名称
 		categoryName = ""
 	} else {
 		categoryName = strings.Split(categoryName, "/")[0]
@@ -38,12 +40,12 @@ func readMarkdown(path string) (Markdown, MarkdownDetails, error) {
 	if markdownFile.IsDir() {
 		return content, fullContent, errors.New("this path is Dir")
 	}
-	markdown, mdErr := ioutil.ReadFile(fullPath)
+	md, mdErr := ioutil.ReadFile(fullPath)
 
 	if mdErr != nil {
 		return content, fullContent, mdErr
 	}
-	markdown = bytes.TrimSpace(markdown)
+	md = bytes.TrimSpace(md)
 
 	content.Path = path
 	content.Category = categoryName
@@ -51,15 +53,21 @@ func readMarkdown(path string) (Markdown, MarkdownDetails, error) {
 	content.Date = Time(markdownFile.ModTime())
 
 	fullContent.Markdown = content
-	fullContent.Body = string(markdown)
 
-	if !bytes.HasPrefix(markdown, []byte("```json")) {
-		content.Description = cropDesc(markdown)
+	// markdown 转为 html
+	extensions := parser.CommonExtensions | parser.AutoHeadingIDs
+	par := parser.NewWithExtensions(extensions)
+	body := markdown.ToHTML(md, par, nil)
+
+	fullContent.Body = string(body)
+
+	if !bytes.HasPrefix(md, []byte("```json")) {
+		content.Description = cropDesc(md)
 		return content, fullContent, nil
 	}
 
-	markdown = bytes.Replace(markdown, []byte("```json"), []byte(""), 1)
-	markdownArrInfo := bytes.SplitN(markdown, []byte("```"), 2)
+	md = bytes.Replace(md, []byte("```json"), []byte(""), 1)
+	markdownArrInfo := bytes.SplitN(md, []byte("```"), 2)
 
 	content.Description = cropDesc(markdownArrInfo[1])
 
@@ -67,7 +75,7 @@ func readMarkdown(path string) (Markdown, MarkdownDetails, error) {
 		return content, fullContent, err
 	}
 
-	content.Path = path //保证Path不被用户json赋值，json不能添加`json:"-"`忽略，否则编码到缓存的时候会被忽悠。
+	content.Path = path // 保证Path不被用户json赋值，json不能添加`json:"-"`忽略，否则编码到缓存的时候会被忽悠。
 	fullContent.Markdown = content
 	fullContent.Body = string(markdownArrInfo[1])
 
@@ -85,7 +93,7 @@ func cropDesc(c []byte) string {
 	return string(content[0:config.Cfg.DescriptionLen])
 }
 
-//读取路径下的md文件的部分信息json
+// 读取路径下的md文件的部分信息json
 func GetMarkdown(path string) (Markdown, error) {
 
 	content, _, err := readMarkdown(path)
@@ -96,7 +104,7 @@ func GetMarkdown(path string) (Markdown, error) {
 	return content, nil
 }
 
-//读取路径下的md文件完整信息
+// 读取路径下的md文件完整信息
 func GetMarkdownDetails(path string) (MarkdownDetails, error) {
 
 	_, content, err := readMarkdown(path)
@@ -108,9 +116,9 @@ func GetMarkdownDetails(path string) (MarkdownDetails, error) {
 	return content, nil
 }
 
-//递归获取md文件信息
+// 递归获取md文件信息
 func getMarkdownList(dir string) (MarkdownList, error) {
-	//path=>categoryName
+	// path=>categoryName
 	var fullDir string
 	fullDir = config.Cfg.DocumentPath + "/content" + dir
 

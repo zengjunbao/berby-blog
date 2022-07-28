@@ -14,7 +14,7 @@ import (
 )
 
 func HandleDocumentData(w http.ResponseWriter, r *http.Request) {
-	//r.ParseForm() //解析参数，默认是不会解析的
+	// r.ParseForm() //解析参数，默认是不会解析的
 	fmt.Println("method is:" + r.Method)
 	if r.Method == "POST" {
 		mr, err := r.MultipartReader()
@@ -22,7 +22,7 @@ func HandleDocumentData(w http.ResponseWriter, r *http.Request) {
 			fmt.Println("r.MultipartReader() err,", err)
 			return
 		}
-		//r.Body.Close()
+		// r.Body.Close()
 		form, _ := mr.ReadForm(128)
 		m := make(map[string]string)
 		for k, v := range form.Value {
@@ -56,13 +56,13 @@ func HandleDocumentData(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("blogpath is:" + blogPath)
 		fmt.Println("filename is:" + filename)
 
-		//cmd := exec.Command("git", "pull")
-		//cmd.Dir = blogPath
-		//_, err = cmd.CombinedOutput()
-		//if err != nil {
+		// cmd := exec.Command("git", "pull")
+		// cmd.Dir = blogPath
+		// _, err = cmd.CombinedOutput()
+		// if err != nil {
 		//	fmt.Println("cmd.Run() failed with", err)
 		//	return
-		//}
+		// }
 
 		cmd1 := exec.Command("git", "add", filename)
 		cmd1.Dir = blogPath
@@ -89,8 +89,8 @@ func HandleDocumentData(w http.ResponseWriter, r *http.Request) {
 		var categorylists = "1"
 		jsoncategorylists, _ := json.Marshal(categorylists)
 		fmt.Println(string(jsoncategorylists))
-		//返回的这个是给json用的，需要去掉
-		//w.Header().Set("Content-Length", strconv.Itoa(len(jsoncategorylists)))
+		// 返回的这个是给json用的，需要去掉
+		// w.Header().Set("Content-Length", strconv.Itoa(len(jsoncategorylists)))
 		w.Write(jsoncategorylists)
 		return
 
@@ -98,7 +98,7 @@ func HandleDocumentData(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleDelData(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm() //解析参数，默认是不会解析的
+	r.ParseForm() // 解析参数，默认是不会解析的
 	if r.Method == "GET" {
 		queryForm, err := url.ParseQuery(r.URL.RawQuery)
 		fmt.Println(queryForm)
@@ -145,7 +145,7 @@ func HandleDelData(w http.ResponseWriter, r *http.Request) {
 		var categorylists = "1"
 		jsoncategorylists, _ := json.Marshal(categorylists)
 		fmt.Println(string(jsoncategorylists))
-		//返回的这个是给json用的，需要去掉
+		// 返回的这个是给json用的，需要去掉
 		w.Header().Set("Content-Length", strconv.Itoa(len(jsoncategorylists)))
 		w.Write(jsoncategorylists)
 		return
